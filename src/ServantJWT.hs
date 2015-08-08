@@ -15,7 +15,11 @@ import Control.Monad
 type JWTProtect a = AuthProtect (JWT UnverifiedJWT) (JWT VerifiedJWT) a
 
 instance AuthData (JWT UnverifiedJWT) where
-  authData = Web.JWT.decode . decodeUtf8 <=< lookup "Authorization" . requestHeaders
+  authData = Web.JWT.decode
+           . Prelude.head
+           . Prelude.drop 1 -- Remove the "Bearer" tag on the header
+           . splitOn " "
+           . decodeUtf8 <=< lookup "Authorization" . requestHeaders
 
 -- | verify but lifted into IO.
 verify' :: Secret -> JWT UnverifiedJWT -> IO (Maybe (JWT VerifiedJWT))
