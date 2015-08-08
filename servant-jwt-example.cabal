@@ -38,6 +38,8 @@ executable servant-jwt-example
                      , jwt
                      , warp
                      , either
+                     , containers
+                     , bytestring
                      , data-default
   default-language:    Haskell2010
 
