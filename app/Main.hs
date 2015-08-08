@@ -15,14 +15,45 @@ import Network.Wai.Handler.Warp
 import System.Environment
 import Control.Monad.Trans.Either
 
+import Data.Map (Map)
+import Data.Set (Set)
+import Data.ByteString
+import qualified Data.Map as Map
+import qualified Data.Set as Set
+import Data.Aeson
+import Control.Monad
+
+
+fromJSON' :: FromJSON a => Value -> Maybe a
+fromJSON' json =
+  case fromJSON json of
+    Success a -> Just a
+    _         -> Nothing
 
 data Grant = Grant
   { token :: Text
   }
 $(deriveJSON defaultOptions ''Grant)
 
-type User = Text
+data Creds = Creds
+  { password :: ByteString
+  , roles :: Set Role
+  }
+-- roles for resources 
+--
+data Role = Homepage
+          | Msg 
+          deriving (Ord, Eq)
+$(deriveJSON defaultOptions ''Role)
 
+type User = ByteString
+
+creds :: Map User Creds
+creds = Map.fromList
+  [ ("arian", Creds "test" (Set.fromList [Msg, Homepage]))
+  , ("aaron", Creds "test" (Set.fromList [Homepage]))
+  , ("peter", Creds "test" (Set.empty))
+  ]
 
 type GrantAPI = "grant" :> Get '[JSON] Grant
 grantToken :: Secret -> Maybe User -> EitherT ServantErr IO Grant
