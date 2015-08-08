@@ -30,14 +30,17 @@ grantToken secret Nothing = left err401
 
 -- A stub that always grants a token that's forever valid.
 -- TODO:  Check if token expired
-grantToken s (Just x) = return . Grant $ encodeSigned HS256 s def
+grantToken s (Just user) = do
+  let (Just (Creds _ roles)) =  Map.lookup user creds
+  let stuff = def { unregisteredClaims = Map.singleton "roles" . toJSON . Set.toList $ roles }
+  return $ Grant $ encodeSigned HS256 s stuff
 
 grantServer s = laxProtect auth (grantToken s)
-  where auth ba =
-          if baUser ba == "arian" && baPass ba == "test"
-            then return . Just $ "arian"
-            else return Nothing
-
+  where
+    auth ba = return $ do
+      Creds pass roles <- Map.lookup (baUser ba) creds
+      guard $ baPass ba == pass
+      return $ baUser ba
 
 data Message = Message
   { message :: Text
@@ -45,23 +48,37 @@ data Message = Message
 
 $(deriveJSON defaultOptions ''Message)
 
-type API = (JWTProtect Lax :> MessageAPI)
+
+verifyToken :: Secret -> JWT UnverifiedJWT -> IO (Maybe (Set Role))
+verifyToken s jwt = return $ do
+  fromJSON' =<< Map.lookup "roles" =<< unregisteredClaims . claims <$> Web.JWT.verify s jwt
+
+type API =  (AuthProtect (JWT UnverifiedJWT) (Set Role) Lax :> MessageAPI)
        :<|> (AuthProtect (BasicAuth "grant") User Lax :> GrantAPI)
+       :<|> (AuthProtect (JWT UnverifiedJWT)(Set Role) Lax :> HomepageAPI) 
 
 type MessageAPI = "message" :> Get '[JSON] Message
+messageServer s = laxProtect (verifyToken s) getMessage
+getMessage (Just roles) =
+  if Msg `Set.member` roles
+      then return . Message $ "Welcome. you're authorized"
+      else left err403
+getMessage _          = left err401
 
-messageServer s = laxProtect (verify' s) getMessage
+
+type HomepageAPI = "home" :> Get '[JSON] Text
+homepageServer s = laxProtect (verifyToken s) getHomepage
+getHomepage (Just roles) =
+  if Homepage `Set.member` roles
+      then return "Homepage"
+      else left err403
 
 server :: Secret -> Server API
-server s = messageServer s :<|> grantServer s
-
-getMessage :: Maybe (JWT VerifiedJWT) -> EitherT ServantErr IO Message
-getMessage (Just jwt) = return . Message $ "You've been authorized"
-getMessage _          = left err401
+server s = messageServer s :<|> grantServer s :<|> homepageServer s
 
 
 main :: IO ()
 main = do
-  secretKey <- secret . maybe "secret" pack  <$> lookupEnv "JWT_SECRET"
+  secretKey <- secret . maybe "secret" Data.Text.pack  <$> lookupEnv "JWT_SECRET"
   run 8080 . serve  (Proxy :: Proxy API) $  server secretKey 
   return ()
