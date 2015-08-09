@@ -1,6 +1,11 @@
 # servant-jwt-example
 Servant authentication with javascript web tokens
 
+## **DISCLAIMER**
+This is by no means production ready and I would highly advice to NOT use this in production.
+The reasons are that currently the `jwt` package used is very incomplete and only verifies the signature of the jwt token and not actually the content.   This means people can use expired tokens to reach your API. Which is bad.
+
+I'm in the process of porting the thing to `jose`  to support more secure defaults
 
 ## Usage
 
